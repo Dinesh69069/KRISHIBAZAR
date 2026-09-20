@@ -10,4 +10,5 @@ data/processed/*
 data/external/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/processed/mandi_coordinates.csv
 !data/external/.gitkeep
