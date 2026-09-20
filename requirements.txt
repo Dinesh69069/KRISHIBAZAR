@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+streamlit
+requests
+pandas
+numpy
+scikit-learn
+joblib
+matplotlib
+geopy
+xgboost
+jupyter
+python-dotenv
+supabase

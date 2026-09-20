@@ -1,0 +1,51 @@
+name: Daily Mandi Data Ingestion Sync (Supabase)
+
+on:
+  schedule:
+    # Triggers automatically at 4:00 PM IST (10:30 AM UTC) every single day
+    - cron: '30 10 * * *'
+  # Allows you to manually trigger a run directly from the GitHub Actions tab for testing
+  workflow_dispatch:
+
+jobs:
+  sync-data:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Download your code repository from GitHub onto the cloud virtual machine
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # 2. Build a clean, isolated Python environment
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    # 3. Install application and Supabase dependencies
+    - name: Install Application Drivers
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # 4. Trigger the ingestion engine script to aggregate data and sync with Supabase
+    - name: Run Live Ingestion Script
+      env:
+        DATA_GOV_IN_API_KEY: ${{ secrets.DATA_GOV_IN_API_KEY }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: |
+        python -m src.data.ingestion
+
+    - name: Rebuild features and crop models
+      run: |
+        python -m src.features.engineering
+        python -m src.models.train
+
+    - name: Publish trained models to Supabase
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: |
+        python -m src.models.publish
