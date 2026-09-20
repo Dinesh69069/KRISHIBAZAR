@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
-const GITHUB_URL = 'https://github.com/your-username/your-repo'; // TODO: your repo
+const GITHUB_URL = 'https://github.com/Dinesh69069/KRISHIBAZAR';
 
 const LINKS = [
   { href: '/', label: 'Rate card' },

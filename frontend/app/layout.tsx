@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "KrishiBazar AI",
   description: "Crop price forecasts and best-mandi rankings for Odisha.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 // Applies the saved theme before first paint so the page never flashes the wrong theme.
