@@ -31,6 +31,7 @@ jobs:
 
     # 4. Trigger the ingestion engine script to aggregate data and sync with Supabase
     - name: Run Live Ingestion Script
+      id: ingest
       env:
         DATA_GOV_IN_API_KEY: ${{ secrets.DATA_GOV_IN_API_KEY }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -39,11 +40,13 @@ jobs:
         python -m src.data.ingestion
 
     - name: Rebuild features and crop models
+      if: steps.ingest.outputs.updated == 'true'
       run: |
         python -m src.features.engineering
         python -m src.models.train
 
     - name: Publish trained models to Supabase
+      if: steps.ingest.outputs.updated == 'true'
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

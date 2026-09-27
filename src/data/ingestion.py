@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import time
 import pandas as pd
 import requests
@@ -26,6 +27,19 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 BUCKET_NAME = "mandi-vault"
 FILE_NAME = "cleaned_orissa_mandi.csv"
+
+
+class DataGovUnavailableError(RuntimeError):
+    """Raised when the upstream Data.gov.in service cannot be reached."""
+
+
+def set_workflow_output(name: str, value: str) -> None:
+    """Expose a value to GitHub Actions without affecting local execution."""
+    output_file = os.getenv("GITHUB_OUTPUT")
+    if output_file:
+        with open(output_file, "a", encoding="utf-8") as output:
+            output.write(f"{name}={value}\n")
+
 
 def get_supabase_client() -> Client:
     """Initializes the live web connection channel link to Supabase Cloud infrastructure."""
@@ -58,9 +72,14 @@ def fetch_paginated_records_for_state(state_name: str) -> pd.DataFrame:
                     timeout=(10, 60),
                 )
                 if response.status_code != 200:
-                    if response.status_code in {429, 500, 502, 503, 504} and attempt < 3:
-                        time.sleep(attempt * 2)
-                        continue
+                    if response.status_code in {429, 500, 502, 503, 504}:
+                        if attempt < 3:
+                            time.sleep(attempt * 2)
+                            continue
+                        raise DataGovUnavailableError(
+                            f"Data.gov.in request failed for {state_name} after 3 attempts: "
+                            f"HTTP {response.status_code}"
+                        )
                     raise RuntimeError(
                         f"Data.gov.in request failed for {state_name}: "
                         f"HTTP {response.status_code} - {response.text[:300]}"
@@ -82,8 +101,9 @@ def fetch_paginated_records_for_state(state_name: str) -> pd.DataFrame:
                 break
             except (requests.RequestException, ValueError) as error:
                 if attempt == 3:
-                    raise RuntimeError(
-                        f"Data.gov.in request failed for {state_name} after 3 attempts: {error}"
+                    clean_err = re.sub(r"api-key=[^&\s'\"]+", "api-key=REDACTED", str(error))
+                    raise DataGovUnavailableError(
+                        f"Data.gov.in request failed for {state_name} after 3 attempts: {clean_err}"
                     ) from error
                 time.sleep(attempt * 2)
     return pd.DataFrame(all_records)
@@ -96,13 +116,24 @@ def run_production_ingestion():
             "SUPABASE_SERVICE_ROLE_KEY in .env or GitHub Actions secrets."
         )
     
-    df_orissa = fetch_paginated_records_for_state("Orissa")
-    df_odisha = fetch_paginated_records_for_state("Odisha")
-    df_new = pd.concat([df_orissa, df_odisha], ignore_index=True)
+    source_frames = []
+    for state_name in ("Odisha", "Orissa"):
+        try:
+            source_frames.append(fetch_paginated_records_for_state(state_name))
+        except DataGovUnavailableError as error:
+            print(f"⚠️ {error}. Keeping the current cloud dataset unchanged.")
+
+    if not source_frames:
+        print("📅 Data.gov.in is temporarily unavailable. No data, features, or models were changed.")
+        set_workflow_output("updated", "false")
+        return False
+
+    df_new = pd.concat(source_frames, ignore_index=True)
     
     if df_new.empty:
         print("📅 Info: No new mandi records published today. Cloud storage matrix preserved.")
-        return
+        set_workflow_output("updated", "false")
+        return False
 
     # Normalize the API's lowercase response fields into the canonical schema.
     column_mapping = {
@@ -191,6 +222,8 @@ def run_production_ingestion():
     os.makedirs("data/processed", exist_ok=True)
     df_rolling.to_csv("data/processed/cleaned_orissa_mandi.csv", index=False)
     print(f"💾 Success! Cloud repository up to date. Active dataset size: {len(df_rolling)} rows.")
+    set_workflow_output("updated", "true")
+    return True
 
 if __name__ == "__main__":
     run_production_ingestion()

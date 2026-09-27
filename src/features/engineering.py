@@ -51,7 +51,7 @@ def build_time_series_features(input_file, output_file):
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     df_ml_ready.to_csv(output_file, index=False)
     
-    print(f"✅ Success! Feature matrix shape: {df_ml_ready.shape}")
+    print(f"[SUCCESS] Feature matrix shape: {df_ml_ready.shape}")
     print(f" Engineered data saved to: {output_file}")
     return df_ml_ready
 

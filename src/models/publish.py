@@ -1,5 +1,6 @@
 import glob
 import os
+import time
 
 from dotenv import load_dotenv
 from supabase import Client, create_client
@@ -16,19 +17,27 @@ def publish_models(models_dir: str = "models") -> None:
         raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required to publish models.")
 
     client: Client = create_client(supabase_url, supabase_key)
-    model_paths = glob.glob(os.path.join(models_dir, "crop_model_*.pkl"))
+    model_paths = sorted(glob.glob(os.path.join(models_dir, "crop_model_*.pkl")))
     if not model_paths:
         raise FileNotFoundError(f"No crop models found in {models_dir}.")
 
     for model_path in model_paths:
         file_name = os.path.basename(model_path)
-        with open(model_path, "rb") as model_file:
-            client.storage.from_(BUCKET_NAME).upload(
-                path=file_name,
-                file=model_file.read(),
-                file_options={"content-type": "application/octet-stream", "upsert": "true"},
-            )
-        print(f"Published {file_name} to Supabase.")
+        for attempt in range(1, 4):
+            try:
+                with open(model_path, "rb") as model_file:
+                    client.storage.from_(BUCKET_NAME).upload(
+                        path=file_name,
+                        file=model_file.read(),
+                        file_options={"content-type": "application/octet-stream", "upsert": "true"},
+                    )
+                print(f"Published {file_name} to Supabase.")
+                break
+            except Exception as err:
+                if attempt == 3:
+                    raise RuntimeError(f"Failed to publish {file_name} after 3 attempts: {err}") from err
+                print(f"Upload attempt {attempt} for {file_name} timed out or failed ({err}). Retrying...")
+                time.sleep(2 * attempt)
 
 
 if __name__ == "__main__":
